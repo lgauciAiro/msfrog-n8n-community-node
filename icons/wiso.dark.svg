@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Wiso Frog dark">
+	<defs>
+		<linearGradient id="bgDark" x1="0%" y1="0%" x2="100%" y2="100%">
+			<stop offset="0%" stop-color="#0b1f2d" />
+			<stop offset="100%" stop-color="#163047" />
+		</linearGradient>
+	</defs>
+	<rect width="256" height="256" rx="56" fill="url(#bgDark)" />
+	<circle cx="128" cy="122" r="74" fill="#ffffff" opacity="0.12" />
+	<path d="M70 128c0-32 26-58 58-58s58 26 58 58-26 58-58 58-58-26-58-58Z" fill="#9ee9dc" />
+	<text x="128" y="147" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="700" fill="#0b1f2d">W</text>
+</svg>

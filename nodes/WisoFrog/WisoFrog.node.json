@@ -1,0 +1,14 @@
+{
+	"node": "n8n-nodes-wiso-frog",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Development", "Developer Tools"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://bitbucket.org/airomt/wiso-n8n",
+				"description": "Wiso API documentation"
+			}
+		]
+	}
+}
