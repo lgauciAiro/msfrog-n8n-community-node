@@ -87,7 +87,7 @@ In the run settings, add the following:
 
 | Host path | Container path |
 |---|---|
-| `C:\projects\msfrog-n8n-community-node\dist` | `/custom` |
+| `C:\projects\wiso-n8n-community-node\dist` | `/custom` |
 | `n8n_data` | `/home/node/.n8n` |
 
 > The `n8n_data` entry re-attaches the named volume that holds your existing data.
