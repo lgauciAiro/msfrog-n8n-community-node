@@ -17,7 +17,8 @@ export class Msfrog implements INodeType {
 		name: 'msfrog',
 		icon: { light: 'file:../../icons/msfrog.svg', dark: 'file:../../icons/msfrog.dark.svg' },
 		group: ['transform'],
-		version: 1,
+		version: [1, 2],
+		defaultVersion: 2,
 		subtitle: '={{$parameter["resource"] + ": " + $parameter["operation"]}}',
 		description: 'Access the MSFrog API',
 		defaults: {
@@ -164,6 +165,7 @@ export class Msfrog implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const inputItems = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
+		const nodeVersion = this.getNode().typeVersion;
 
 		for (let itemIndex = 0; itemIndex < inputItems.length; itemIndex++) {
 			try {
@@ -182,7 +184,7 @@ export class Msfrog implements INodeType {
 					return this.helpers.httpRequestWithAuthentication.call(this, 'msfrogApi', options) as Promise<T>;
 				};
 
-				if (resource === 'workflow' && operation === 'getAll') {
+				if (nodeVersion >= 2 && resource === 'workflow' && operation === 'getAll') {
 					const companyUuid = this.getNodeParameter('companyUuid', itemIndex, '') as string;
 					const returnAll = this.getNodeParameter('returnAll', itemIndex, true) as boolean;
 					const limit = this.getNodeParameter('limit', itemIndex, 50) as number;
@@ -197,7 +199,7 @@ export class Msfrog implements INodeType {
 					continue;
 				}
 
-				if (resource === 'company' && operation === 'getAll') {
+				if (nodeVersion >= 2 && resource === 'company' && operation === 'getAll') {
 					const returnAll = this.getNodeParameter('returnAll', itemIndex, true) as boolean;
 					const limit = this.getNodeParameter('limit', itemIndex, 50) as number;
 					const companies = await requestJson<IDataObject[]>('/api/company/getcompanysimpledetails');
@@ -210,7 +212,41 @@ export class Msfrog implements INodeType {
 					continue;
 				}
 
-				if (resource === 'user' && operation === 'getSelf') {
+				if (nodeVersion >= 2 && resource === 'user' && operation === 'getSelf') {
+					const user = await requestJson<IDataObject>('/api/user/self');
+					returnData.push({ json: user, pairedItem: { item: itemIndex } });
+					continue;
+				}
+
+				if (nodeVersion < 2 && resource === 'workflow' && operation === 'getAll') {
+					const companyUuid = this.getNodeParameter('companyUuid', itemIndex, '') as string;
+					const returnAll = this.getNodeParameter('returnAll', itemIndex, true) as boolean;
+					const limit = this.getNodeParameter('limit', itemIndex, 50) as number;
+					const path = companyUuid ? `/api/workflows/company/${companyUuid}` : '/api/workflows';
+					const workflows = await requestJson<IDataObject[]>(path);
+					const selected = returnAll ? workflows : workflows.slice(0, limit);
+
+					for (const workflow of selected) {
+						returnData.push({ json: workflow, pairedItem: { item: itemIndex } });
+					}
+
+					continue;
+				}
+
+				if (nodeVersion < 2 && resource === 'company' && operation === 'getAll') {
+					const returnAll = this.getNodeParameter('returnAll', itemIndex, true) as boolean;
+					const limit = this.getNodeParameter('limit', itemIndex, 50) as number;
+					const companies = await requestJson<IDataObject[]>('/api/company/getcompanysimpledetails');
+					const selected = returnAll ? companies : companies.slice(0, limit);
+
+					for (const company of selected) {
+						returnData.push({ json: company, pairedItem: { item: itemIndex } });
+					}
+
+					continue;
+				}
+
+				if (nodeVersion < 2 && resource === 'user' && operation === 'getSelf') {
 					const user = await requestJson<IDataObject>('/api/user/self');
 					returnData.push({ json: user, pairedItem: { item: itemIndex } });
 					continue;

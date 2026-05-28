@@ -256,6 +256,27 @@ type MsfrogOperation = 'getAll' | 'getSelf' | 'create';
 
 ---
 
+### Versioning for breaking changes
+
+Use node versions when a change could break existing workflows.
+
+Current setup in [`nodes/Msfrog/Msfrog.node.ts`](nodes/Msfrog/Msfrog.node.ts):
+
+- `version: [1, 2]`
+- `defaultVersion: 2`
+- execution branches by `this.getNode().typeVersion`
+
+This keeps existing workflow nodes on v1 behavior while new node instances use v2.
+
+When making a breaking change:
+
+1. Keep v1 parameter names and execution path untouched.
+2. Add or change fields for v2.
+3. Add v2 execution logic behind the v2 branch.
+4. Test one old workflow and one new workflow before release.
+
+---
+
 ## Development
 
 ```bash
