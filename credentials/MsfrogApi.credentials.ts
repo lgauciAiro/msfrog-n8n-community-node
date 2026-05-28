@@ -6,14 +6,14 @@ import type {
 	INodeProperties,
 } from 'n8n-workflow';
 
-export class WisoFrogApi implements ICredentialType {
-	name = 'wisoFrogApi';
+export class MsfrogApi implements ICredentialType {
+	name = 'msfrogApi';
 
-	displayName = 'Wiso Frog API';
+	displayName = 'MSFrog API';
 
 	documentationUrl = 'https://bitbucket.org/airomt/wiso-n8n';
 
-	icon: Icon = { light: 'file:../icons/wiso.svg', dark: 'file:../icons/wiso.dark.svg' };
+	icon: Icon = { light: 'file:../icons/msfrog.svg', dark: 'file:../icons/msfrog.dark.svg' };
 
 	properties: INodeProperties[] = [
 		{
@@ -21,7 +21,7 @@ export class WisoFrogApi implements ICredentialType {
 			name: 'baseUrl',
 			type: 'string',
 			default: 'http://host.docker.internal:8000',
-			description: 'Base URL of the Wiso API',
+			description: 'Base URL of the MSFrog API',
 		},
 		{
 			displayName: 'Access Token',

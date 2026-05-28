@@ -8,27 +8,27 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-type WisoResource = 'workflow' | 'company' | 'user';
-type WisoOperation = 'getAll' | 'getSelf';
+type MsfrogResource = 'workflow' | 'company' | 'user';
+type MsfrogOperation = 'getAll' | 'getSelf';
 
-export class WisoFrog implements INodeType {
+export class Msfrog implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Wiso Frog',
-		name: 'wisoFrog',
-		icon: { light: 'file:../../icons/wiso.svg', dark: 'file:../../icons/wiso.dark.svg' },
+		displayName: 'MSFrog',
+		name: 'msfrog',
+		icon: { light: 'file:../../icons/msfrog.svg', dark: 'file:../../icons/msfrog.dark.svg' },
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["resource"] + ": " + $parameter["operation"]}}',
-		description: 'Access the Wiso API',
+		description: 'Access the MSFrog API',
 		defaults: {
-			name: 'Wiso Frog',
+			name: 'MSFrog',
 		},
 		usableAsTool: true,
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
-				name: 'wisoFrogApi',
+				name: 'msfrogApi',
 				required: true,
 			},
 		],
@@ -39,7 +39,7 @@ export class WisoFrog implements INodeType {
 				type: 'string',
 				default: 'http://host.docker.internal:8000',
 				placeholder: 'https://example.com',
-				description: 'Base URL for the Wiso API without a trailing slash',
+				description: 'Base URL for the MSFrog API without a trailing slash',
 			},
 			{
 				displayName: 'Resource',
@@ -167,8 +167,8 @@ export class WisoFrog implements INodeType {
 
 		for (let itemIndex = 0; itemIndex < inputItems.length; itemIndex++) {
 			try {
-				const resource = this.getNodeParameter('resource', itemIndex) as WisoResource;
-				const operation = this.getNodeParameter('operation', itemIndex) as WisoOperation;
+				const resource = this.getNodeParameter('resource', itemIndex) as MsfrogResource;
+				const operation = this.getNodeParameter('operation', itemIndex) as MsfrogOperation;
 				const baseUrl = this.getNodeParameter('baseUrl', itemIndex) as string;
 				const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 
@@ -179,7 +179,7 @@ export class WisoFrog implements INodeType {
 						json: true,
 					};
 
-					return this.helpers.httpRequestWithAuthentication.call(this, 'wisoFrogApi', options) as Promise<T>;
+					return this.helpers.httpRequestWithAuthentication.call(this, 'msfrogApi', options) as Promise<T>;
 				};
 
 				if (resource === 'workflow' && operation === 'getAll') {

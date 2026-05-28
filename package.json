@@ -1,7 +1,7 @@
 {
-  "name": "n8n-nodes-wiso-frog",
+  "name": "n8n-nodes-msfrog",
   "version": "0.1.0",
-  "description": "n8n community node for Wiso API access",
+  "description": "n8n community node for MSFrog API access",
   "author": {
     "name": "Leithon Gauci",
     "email": "lgauci@airosoftware.com"
@@ -17,7 +17,7 @@
   "keywords": [
     "n8n",
     "n8n-community-node-package",
-    "wiso",
+    "msfrog",
     "api"
   ],
   "scripts": {
@@ -37,10 +37,10 @@
     "n8nNodesApiVersion": 1,
     "strict": true,
     "credentials": [
-      "dist/credentials/WisoFrogApi.credentials.js"
+      "dist/credentials/MsfrogApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/WisoFrog/WisoFrog.node.js"
+      "dist/nodes/Msfrog/Msfrog.node.js"
     ]
   },
   "peerDependencies": {

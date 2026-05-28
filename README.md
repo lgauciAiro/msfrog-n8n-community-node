@@ -1,6 +1,6 @@
-# n8n-nodes-wiso-frog
+# n8n-nodes-msfrog
 
-This is an n8n community node that exposes Wiso API resources inside n8n workflows.
+This is an n8n community node that exposes MSFrog API resources inside n8n workflows.
 
 ---
 
@@ -28,13 +28,13 @@ This is an n8n community node that exposes Wiso API resources inside n8n workflo
 
 ## Credentials
 
-In n8n, go to **Credentials → New** and search for **Wiso Frog API**.
+In n8n, go to **Credentials → New** and search for **MSFrog API**.
 
 Fill in:
 
 | Field | Value |
 |---|---|
-| Base URL | The root URL of your Wiso backend, e.g. `http://host.docker.internal:8000` (no trailing slash). Use `host.docker.internal` instead of `localhost` when n8n runs in Docker and the backend runs on your host machine. |
+| Base URL | The root URL of your MSFrog backend, e.g. `http://host.docker.internal:8000` (no trailing slash). Use `host.docker.internal` instead of `localhost` when n8n runs in Docker and the backend runs on your host machine. |
 | Access Token | A Passport bearer token. Paste the raw token value only, without the `Bearer ` prefix. |
 
 To obtain a token, call the backend `/login` endpoint and copy the `access_token` from the response.
@@ -49,7 +49,7 @@ These steps apply when you are running n8n in a Docker container and want to loa
 
 - Docker Desktop installed and running
 - n8n container already set up
-- This repository cloned to `C:\projects\wiso-n8n-community-node`
+- This repository cloned to a local folder (for example `C:\projects\msfrog-n8n-community-node`)
 
 ### Step 1 — Build the package
 
@@ -87,7 +87,7 @@ In the run settings, add the following:
 
 | Host path | Container path |
 |---|---|
-| `C:\projects\wiso-n8n-community-node\dist` | `/custom` |
+| `C:\projects\msfrog-n8n-community-node\dist` | `/custom` |
 | `n8n_data` | `/home/node/.n8n` |
 
 > The `n8n_data` entry re-attaches the named volume that holds your existing data.
@@ -105,7 +105,7 @@ Click **Run**.
 1. Open n8n at `http://localhost:5678`.
 2. Open or create a workflow.
 3. Click the node picker (`+` button).
-4. Search for **Wiso Frog**.
+4. Search for **MSFrog**.
 5. The node should appear with the three available operations.
 
 ### Step 5 — Rebuilding after code changes
@@ -126,12 +126,12 @@ This section shows how to extend the node with a new resource or operation.
 
 All node logic lives in two files:
 
-- [`nodes/WisoFrog/WisoFrog.node.ts`](nodes/WisoFrog/WisoFrog.node.ts) — all UI properties and API call logic
-- [`credentials/WisoFrogApi.credentials.ts`](credentials/WisoFrogApi.credentials.ts) — credential fields (only change this if the auth model changes)
+- [`nodes/Msfrog/Msfrog.node.ts`](nodes/Msfrog/Msfrog.node.ts) — all UI properties and API call logic
+- [`credentials/MsfrogApi.credentials.ts`](credentials/MsfrogApi.credentials.ts) — credential fields (only change this if the auth model changes)
 
 ### The three steps
 
-Every new operation requires exactly three changes, all inside `WisoFrog.node.ts`.
+Every new operation requires exactly three changes, all inside `Msfrog.node.ts`.
 
 ---
 
@@ -224,7 +224,7 @@ if (resource === 'workflowEntry' && operation === 'create') {
 
   const result = await this.helpers.httpRequestWithAuthentication.call(
     this,
-    'wisoFrogApi',
+    'msfrogApi',
     options,
   ) as IDataObject;
 
@@ -250,8 +250,8 @@ Restart the Docker container. The new operation will appear in the node picker i
 Add your new resource/operation values to the union types at the top of the file so TypeScript can validate them:
 
 ```typescript
-type WisoResource = 'workflow' | 'company' | 'user' | 'workflowEntry';
-type WisoOperation = 'getAll' | 'getSelf' | 'create';
+type MsfrogResource = 'workflow' | 'company' | 'user' | 'workflowEntry';
+type MsfrogOperation = 'getAll' | 'getSelf' | 'create';
 ```
 
 ---

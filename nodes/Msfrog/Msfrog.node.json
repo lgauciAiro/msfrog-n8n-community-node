@@ -1,12 +1,13 @@
 {
-	"credential": "wisoFrogApi",
+	"node": "n8n-nodes-msfrog",
+	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
 	"categories": ["Development", "Developer Tools"],
 	"resources": {
 		"credentialDocumentation": [
 			{
 				"url": "https://bitbucket.org/airomt/wiso-n8n",
-				"description": "Wiso API documentation"
+				"description": "MSFrog API documentation"
 			}
 		]
 	}
