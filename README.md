@@ -9,6 +9,7 @@ This is an n8n community node that exposes MSFrog API resources inside n8n workf
 - [Operations](#operations)
 - [Credentials](#credentials)
 - [Setting up inside a Docker n8n instance](#setting-up-inside-a-docker-n8n-instance)
+- [Sample Client Workflow](#sample-client-workflow)
 - [Adding a new operation](#adding-a-new-operation)
 - [Development](#development)
 - [Compatibility](#compatibility)
@@ -18,11 +19,13 @@ This is an n8n community node that exposes MSFrog API resources inside n8n workf
 
 ## Operations
 
-| Resource | Operation | Description |
-|---|---|---|
-| Company | Get Many | Returns all companies the authenticated user has access to |
-| User | Get Self | Returns the profile of the currently authenticated user |
-| Workflow | Get Many | Returns all workflows, optionally filtered by company UUID |
+| Resource | Operations |
+|---|---|
+| Company | Get Many |
+| User | Get Self |
+| Workflow | Get list of Workflow Entry Types, Get Many |
+| Workflow Entry | Get list of existing Workflow Entries for the company, Create Workflow Entry, Update Workflow Entry, Fetch Step, Update Step, Complete Step, Un-complete Step, Create Comment, Update Comment, Delete Comment |
+| Task | Create new Task, Update Task, Delete Task, Complete Task, Un-complete Task, Create Comment, Update Comment, Delete Comment |
 
 ---
 
@@ -38,6 +41,8 @@ Fill in:
 | Access Token | A Passport bearer token. Paste the raw token value only, without the `Bearer ` prefix. |
 
 To obtain a token, call the backend `/login` endpoint and copy the `access_token` from the response.
+
+Create this credential once and then select the same saved **MSFrog API** credential in every MSFrog node. When the token changes, update the credential once and all workflows will use the new token.
 
 ---
 
@@ -106,7 +111,7 @@ Click **Run**.
 2. Open or create a workflow.
 3. Click the node picker (`+` button).
 4. Search for **MSFrog**.
-5. The node should appear with the three available operations.
+5. The node should appear with workflow, workflow-entry, task, company, and user operations.
 
 ### Step 5 — Rebuilding after code changes
 
@@ -117,6 +122,136 @@ npm run build
 ```
 
 Then restart the Docker container. n8n re-reads the mounted `dist/` folder on startup.
+
+---
+
+## Sample Client Workflow
+
+This is the recommended first-pass workflow for the client email support scenario you described.
+
+### Target behavior
+
+1. End users email a dedicated support mailbox.
+2. n8n reads the email body and attachments.
+3. AI classifies the issue and decides whether it can self-resolve.
+4. AI decides whether to create a new workflow entry or update an existing one.
+5. n8n replies to the user when guidance or confirmation is needed.
+6. Replies from the same email thread are linked back to the same workflow entry.
+
+### Recommended node flow
+
+```text
+Email Trigger / IMAP Trigger
+  -> Normalize Email Payload (Code)
+  -> Extract Attachment Text (per attachment as needed)
+  -> AI: Summarize + Classify + Decide
+  -> Lookup Existing Email/Workflow Link
+  -> Switch
+    -> Self-resolve only
+      -> AI: Draft reply
+      -> Send Email
+      -> Save thread outcome
+    -> Create new workflow entry
+      -> MSFrog: Get list of Workflow Entry Types
+      -> MSFrog: Create Workflow Entry
+      -> MSFrog: Create Comment
+      -> Send Email
+      -> Save email/workflow link
+    -> Update existing workflow entry
+      -> MSFrog: Get list of existing Workflow Entries for the company
+      -> MSFrog: Update Workflow Entry or Update Step
+      -> MSFrog: Create Comment
+      -> Send Email
+      -> Update email/workflow link
+```
+
+### Recommended persistence for email linking
+
+You need one place to track which email thread belongs to which workflow entry. The cleanest approach is to keep a lightweight mapping store in n8n or in a small database table.
+
+Store at least these fields:
+
+| Field | Why it matters |
+|---|---|
+| `mailbox` | Supports multiple inbound addresses later |
+| `messageId` | Unique ID for the inbound email |
+| `threadId` or `conversationId` | Best key for matching follow-up replies |
+| `inReplyTo` | Helps link replies when thread ID is missing |
+| `references` | Extra fallback for threading |
+| `fromEmail` | Useful for matching and audit |
+| `subject` | Useful fallback context |
+| `workflowEntryUuid` | Main link back to MSFrog |
+| `workflowType` or `workflowUuid` | Tells you which workflow definition was used |
+| `lastAction` | Records whether AI resolved, created, or updated |
+| `lastOutboundMessageId` | Helps track replies sent by AI |
+
+### Suggested first build
+
+Start with a testable version before connecting a real mailbox.
+
+1. Replace the email trigger with a **Manual Trigger**.
+2. Add a **Set** node that mocks one inbound email with fields like `from`, `subject`, `text`, `messageId`, `threadId`, and `attachments`.
+3. Add a **Code** node to normalize the email into a stable structure for later AI and MSFrog nodes.
+4. Add an **AI** node that returns a strict JSON decision like:
+
+```json
+{
+  "summary": "Printer issue reported by client",
+  "canSelfResolve": false,
+  "action": "create_workflow",
+  "workflowType": "IT Support",
+  "replyNeeded": true,
+  "replyDraft": "We have logged your request and will update you shortly."
+}
+```
+
+5. Add a **Switch** node on `action` with branches for `self_resolve`, `create_workflow`, and `update_workflow`.
+6. Only after that works, swap the **Manual Trigger** for the real mailbox trigger.
+
+### Attachment handling
+
+For the first client demo, normalize all attachments into extracted text before the AI decision step.
+
+Recommended approach:
+
+1. Keep original binary attachments in the workflow.
+2. Use attachment-type routing:
+   - PDFs and text files: extract text directly
+   - Images: OCR first, then pass extracted text to AI
+   - Office files: convert/extract text before AI
+   - Email attachments: parse nested email body and metadata if possible
+3. Pass both the email body and the extracted attachment text to the AI node.
+
+### Decision rules for create vs update
+
+Use this order of checks:
+
+1. If the inbound message is a reply and your mapping store already has a `workflowEntryUuid` for the thread, update the existing workflow entry.
+2. If the AI explicitly identifies an existing ticket or reference number in the email, try to match that first.
+3. If no link exists, create a new workflow entry.
+4. Whenever AI is unsure, add a comment and reply asking for clarification instead of creating duplicates.
+
+### Where to use MSFrog nodes
+
+- **Get list of Workflow Entry Types**: load available workflow types before create decisions.
+- **Get list of existing Workflow Entries for the company**: provide candidate entries when AI or rules try to match an existing case.
+- **Create Workflow Entry**: create a new case.
+- **Update Workflow Entry**: update header details when the case evolves.
+- **Fetch Step / Update Step / Complete Step / Un-complete Step**: manage workflow progress when the email clearly maps to a step.
+- **Create Comment / Update Comment / Delete Comment**: keep the email conversation visible on the workflow entry.
+- **Task operations**: create or update follow-up tasks for assigned users when the email implies work needs to be done.
+
+### Suggested first demo scope
+
+For the first client-facing sample, keep the scope tight:
+
+1. One mailbox.
+2. One company.
+3. One or two workflow entry types.
+4. Create-comment-update flow only.
+5. No automatic step completion until the linking logic is stable.
+
+That gives you a demo that is believable without taking on the hardest edge cases too early.
 
 ---
 
@@ -188,12 +323,12 @@ Add a new `operation` property block for your resource, and any input fields it 
 
 // Input field — only shown when resource = workflowEntry, operation = create
 {
-  displayName: 'Workflow ID',
-  name: 'workflowId',
+  displayName: 'Workflow UUID',
+  name: 'workflowUuid',
   type: 'string',
   default: '',
   required: true,
-  description: 'The ID of the workflow to create an entry for',
+  description: 'The workflow UUID to create an entry for',
   displayOptions: {
     show: {
       resource: ['workflowEntry'],
@@ -211,22 +346,15 @@ Inside the `for` loop in `execute()`, add a new `if` block before the final `thr
 
 ```typescript
 if (resource === 'workflowEntry' && operation === 'create') {
-  const workflowId = this.getNodeParameter('workflowId', itemIndex) as string;
+  const workflowUuid = this.getNodeParameter('workflowUuid', itemIndex) as string;
+  const name = this.getNodeParameter('name', itemIndex) as string;
+  const stepAssignments = this.getNodeParameter('stepAssignments', itemIndex) as IDataObject[];
 
-  const options: IHttpRequestOptions = {
-    method: 'POST',
-    url: `${normalizedBaseUrl}/api/workflowentries`,
-    json: true,
-    body: {
-      workflow_id: workflowId,
-    },
-  };
-
-  const result = await this.helpers.httpRequestWithAuthentication.call(
-    this,
-    'msfrogApi',
-    options,
-  ) as IDataObject;
+  const result = await requestApi<IDataObject>('POST', '/api/userworkflows', {
+    workflow_uuid: workflowUuid,
+    name,
+    step_assignments: stepAssignments,
+  });
 
   returnData.push({ json: result, pairedItem: { item: itemIndex } });
   continue;
@@ -250,8 +378,8 @@ Restart the Docker container. The new operation will appear in the node picker i
 Add your new resource/operation values to the union types at the top of the file so TypeScript can validate them:
 
 ```typescript
-type MsfrogResource = 'workflow' | 'company' | 'user' | 'workflowEntry';
-type MsfrogOperation = 'getAll' | 'getSelf' | 'create';
+type MsfrogResource = 'workflow' | 'company' | 'user' | 'workflowEntry' | 'task';
+type MsfrogOperation = 'getTypes' | 'getAll' | 'getSelf' | 'create' | 'update';
 ```
 
 ---
@@ -263,10 +391,10 @@ Use node versions when a change could break existing workflows.
 Current setup in [`nodes/Msfrog/Msfrog.node.ts`](nodes/Msfrog/Msfrog.node.ts):
 
 - `version: [1, 2]`
-- `defaultVersion: 2`
-- execution branches by `this.getNode().typeVersion`
+- `defaultVersion: 1`
+- version 2 is currently a placeholder guard, not a separate execution branch
 
-This keeps existing workflow nodes on v1 behavior while new node instances use v2.
+This keeps the current implementation on v1 while reserving v2 for a future breaking revision.
 
 When making a breaking change:
 

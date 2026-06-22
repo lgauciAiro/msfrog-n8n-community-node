@@ -1,0 +1,627 @@
+{
+  "name": "MSFrog Client Email Triage Sample",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7aee93f1-f3ec-4ff8-8f56-b00e227eb6b1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    mailbox: 'acme-support@example.com',\n    to: ['acme-support@example.com'],\n    from: 'client@acme.com',\n    subject: 'Printer error on workstation 14',\n    text: 'Hi team, our printer is showing error 0x887A. Please help. Screenshot attached.',\n    messageId: '<msg-1001@example.com>',\n    threadId: 'thread-1001',\n    inReplyTo: '',\n    references: [],\n    routingHints: [\n      {\n        mailboxPattern: 'acme-support@example.com',\n        companyNameHint: 'Acme',\n        workflowNameHint: 'IT Support'\n      },\n      {\n        mailboxPattern: 'supplier-onboarding@example.com',\n        companyNameHint: 'Supplier',\n        workflowNameHint: 'Supplier Onboarding'\n      }\n    ],\n    attachments: [\n      {\n        fileName: 'printer-error.png',\n        mimeType: 'image/png',\n        extractedText: 'Screenshot shows printer status error code 0x887A'\n      },\n      {\n        fileName: 'previous-email.eml',\n        mimeType: 'message/rfc822',\n        extractedText: 'Forwarded email: printer worked yesterday and failed after toner replacement.'\n      }\n    ]\n  }\n}];"
+      },
+      "id": "f61261ea-f7f4-4e09-bcf0-86a08394cd2e",
+      "name": "Mock Inbound Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1580,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $json;\nconst attachmentText = (source.attachments || [])\n  .map((attachment) => `${attachment.fileName}: ${attachment.extractedText || ''}`.trim())\n  .join('\\n');\n\nconst matchedRoute = (source.routingHints || []).find((route) => route.mailboxPattern === source.mailbox) || null;\n\nreturn [{\n  json: {\n    mailbox: source.mailbox,\n    to: source.to || [],\n    from: source.from,\n    senderDomain: String(source.from || '').split('@')[1] || '',\n    inboundEmail: {\n      subject: source.subject,\n      text: source.text,\n      messageId: source.messageId,\n      threadId: source.threadId,\n      inReplyTo: source.inReplyTo,\n      references: source.references || []\n    },\n    attachmentSummary: attachmentText,\n    combinedText: [source.subject, source.text, attachmentText].filter(Boolean).join('\\n\\n'),\n    routeHint: matchedRoute,\n    linkLookup: {\n      matched: false,\n      workflowEntryUuid: '',\n      reason: 'No persisted email-thread mapping in sample workflow'\n    }\n  }\n}];"
+      },
+      "id": "63aefde0-57e4-41dd-a8db-fbd489d355c0",
+      "name": "Normalize Email Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "company",
+        "operation": "getAll",
+        "returnAll": true
+      },
+      "id": "4c4141a7-1a2b-4f9a-a2d6-6179d2819458",
+      "name": "MSFrog Get Companies",
+      "type": "CUSTOM.msfrog",
+      "typeVersion": 1,
+      "credentials": {
+        "msfrogApi": {
+          "id": "1",
+          "name": "MSFrog API"
+        }
+      },
+      "position": [
+        -1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Normalize Email Payload').first().json;\nconst companies = $input.all().map((item) => item.json);\nconst routeHint = source.routeHint || {};\nconst companyHint = String(routeHint.companyNameHint || source.senderDomain || '').toLowerCase();\n\nconst ranked = companies\n  .map((company) => {\n    const name = String(company.name || '').toLowerCase();\n    let score = 0;\n\n    if (companyHint && name.includes(companyHint)) score += 10;\n    if (companyHint && companyHint.includes(name)) score += 6;\n    if (source.senderDomain && name.includes(String(source.senderDomain).split('.')[0])) score += 4;\n\n    return { company, score };\n  })\n  .sort((a, b) => b.score - a.score);\n\nconst selected = ranked[0]?.company;\nif (!selected) {\n  throw new Error('Could not resolve company from mailbox and email hints.');\n}\n\nreturn [{\n  json: {\n    ...source,\n    company: {\n      uuid: selected.uuid,\n      name: selected.name,\n      active: selected.active\n    },\n    companyCandidates: ranked.slice(0, 5).map((item) => ({\n      uuid: item.company.uuid,\n      name: item.company.name,\n      score: item.score\n    }))\n  }\n}];"
+      },
+      "id": "d25022c6-f1ca-48dc-bb27-c9fc6acee9fb",
+      "name": "Resolve Company",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -890,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "workflow",
+        "operation": "getTypes",
+        "companyUuid": "={{$json.company.uuid}}",
+        "returnAll": true
+      },
+      "id": "565a7cc8-9dd3-4915-a52e-53e1afce74be",
+      "name": "MSFrog Get Workflow Types",
+      "type": "CUSTOM.msfrog",
+      "typeVersion": 1,
+      "credentials": {
+        "msfrogApi": {
+          "id": "1",
+          "name": "MSFrog API"
+        }
+      },
+      "position": [
+        -660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Resolve Company').first().json;\nconst workflows = $input.all().map((item) => item.json);\nconst body = String(source.combinedText || '').toLowerCase();\nconst isReply = Boolean(source.inboundEmail?.inReplyTo) || Boolean(source.linkLookup?.matched);\nconst workflowHint = String(source.routeHint?.workflowNameHint || '').toLowerCase();\n\nlet action = 'create_workflow';\nlet canSelfResolve = false;\nlet replyDraft = 'We have logged your issue and will keep you updated.';\n\nif (body.includes('resolved') || body.includes('fixed') || body.includes('working now')) {\n  action = 'self_resolve';\n  canSelfResolve = true;\n  replyDraft = 'Thanks for the update. Based on your email this looks resolved. Please let us know if the issue returns.';\n} else if (isReply || body.includes('existing ticket') || body.includes('update case') || body.includes('follow up')) {\n  action = 'update_workflow';\n  replyDraft = 'Thanks for the additional information. We have updated your existing case.';\n}\n\nconst workflowCandidates = workflows\n  .map((workflow) => {\n    const name = String(workflow.name || '').toLowerCase();\n    let score = 0;\n    if (workflowHint && name.includes(workflowHint)) score += 10;\n    if (body.includes(name)) score += 6;\n    if (name.includes('support') && (body.includes('issue') || body.includes('error') || body.includes('help'))) score += 3;\n    return { workflow, score };\n  })\n  .sort((a, b) => b.score - a.score);\n\nconst selectedWorkflow = workflowCandidates[0]?.workflow || null;\n\nreturn [{\n  json: {\n    ...source,\n    availableWorkflowTypes: workflows.map((workflow) => ({\n      uuid: workflow.uuid,\n      name: workflow.name,\n      status: workflow.status\n    })),\n    aiDecision: {\n      summary: source.inboundEmail?.subject || 'Client support request',\n      canSelfResolve,\n      action,\n      replyNeeded: true,\n      replyDraft,\n      workflowNameHint: selectedWorkflow?.name || source.routeHint?.workflowNameHint || '',\n      workflowUuidCandidate: selectedWorkflow?.uuid || '',\n      stepTitleHint: body.includes('printer') ? 'investigate' : '',\n      existingEntryReferenceHint: '',\n      entryName: source.inboundEmail?.subject || 'New support case',\n      commentText: `Inbound email from ${source.from}:\\n\\n${source.combinedText}`\n    }\n  }\n}];"
+      },
+      "id": "c61e8de2-0d0c-4b4f-a7a2-d45b35caafc9",
+      "name": "AI Decision Placeholder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -430,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5192a519-4b8a-4e03-984e-b6bb66824ef7",
+              "leftValue": "={{$json.aiDecision.action}}",
+              "rightValue": "create_workflow",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "620987fe-b0c4-4604-b6d0-6a3bf7622f05",
+      "name": "If Create Workflow",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -190,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('AI Decision Placeholder').first().json;\nconst workflows = $('MSFrog Get Workflow Types').all().map((item) => item.json);\nconst hint = String(source.aiDecision.workflowNameHint || '').toLowerCase();\n\nconst activeWorkflows = workflows.filter((workflow) => {\n  const status = String(workflow.status || '').toLowerCase();\n  return status === '' || status === 'active';\n});\n\nconst ranked = activeWorkflows\n  .map((workflow) => {\n    const name = String(workflow.name || '').toLowerCase();\n    let score = 0;\n    if (hint && name.includes(hint)) score += 10;\n    if (hint && hint.includes(name)) score += 6;\n    return { workflow, score };\n  })\n  .sort((a, b) => b.score - a.score);\n\nconst selectedWorkflow = ranked[0]?.workflow;\nif (!selectedWorkflow) {\n  throw new Error('Could not resolve an active workflow type from available definitions.');\n}\n\nconst steps = Array.isArray(selectedWorkflow.steps) ? selectedWorkflow.steps : [];\nconst stepHint = String(source.aiDecision.stepTitleHint || '').toLowerCase();\nconst selectedStep = steps.find((step) => String(step.title || '').toLowerCase().includes(stepHint)) || steps[0];\n\nif (!selectedStep) {\n  throw new Error('Selected workflow has no steps, so entry creation cannot continue.');\n}\n\nreturn [{\n  json: {\n    ...source,\n    selectedWorkflow: {\n      uuid: selectedWorkflow.uuid,\n      name: selectedWorkflow.name,\n      stepUuid: selectedStep.uuid,\n      stepTitle: selectedStep.title\n    },\n    msfrogCreate: {\n      workflowUuid: selectedWorkflow.uuid,\n      name: source.aiDecision.entryName,\n      description: `Auto-created from email ${source.inboundEmail.messageId}`,\n      stepAssignments: [\n        {\n          workflow_step_uuid: selectedStep.uuid,\n          assigned_user_uuid: null,\n          due_date: null\n        }\n      ]\n    }\n  }\n}];"
+      },
+      "id": "07225159-b53e-413b-a7bb-d7a8376caf0d",
+      "name": "Prepare Create Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        50,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "workflowEntry",
+        "operation": "create",
+        "workflowUuid": "={{$json.msfrogCreate.workflowUuid}}",
+        "name": "={{$json.msfrogCreate.name}}",
+        "description": "={{$json.msfrogCreate.description}}",
+        "stepAssignments": "={{ JSON.stringify($json.msfrogCreate.stepAssignments) }}"
+      },
+      "id": "588fc0d1-51dc-420e-917d-1c4e53c9124b",
+      "name": "MSFrog Create Workflow Entry",
+      "type": "CUSTOM.msfrog",
+      "typeVersion": 1,
+      "credentials": {
+        "msfrogApi": {
+          "id": "1",
+          "name": "MSFrog API"
+        }
+      },
+      "position": [
+        300,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "workflowEntry",
+        "operation": "createComment",
+        "workflowEntryUuid": "={{$json.uuid}}",
+        "comment": "={{$('AI Decision Placeholder').first().json.aiDecision.commentText}}"
+      },
+      "id": "e73f278f-d0c0-4095-a3cb-161b841932ad",
+      "name": "MSFrog Comment New Entry",
+      "type": "CUSTOM.msfrog",
+      "typeVersion": 1,
+      "credentials": {
+        "msfrogApi": {
+          "id": "1",
+          "name": "MSFrog API"
+        }
+      },
+      "position": [
+        560,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('AI Decision Placeholder').first().json;\nconst createdEntry = $('MSFrog Create Workflow Entry').first().json;\n\nreturn [{\n  json: {\n    outcome: 'created',\n    workflowEntryUuid: createdEntry.uuid,\n    replyTo: source.from,\n    replySubject: `Re: ${source.inboundEmail.subject}`,\n    replyBody: `${source.aiDecision.replyDraft}\\n\\nReference: ${createdEntry.entry_number || createdEntry.uuid}`,\n    mappingRecord: {\n      mailbox: source.mailbox,\n      messageId: source.inboundEmail.messageId,\n      threadId: source.inboundEmail.threadId,\n      workflowEntryUuid: createdEntry.uuid,\n      companyUuid: source.company.uuid,\n      workflowUuid: source.selectedWorkflow?.uuid || '',\n      lastAction: 'create_workflow'\n    }\n  }\n}];"
+      },
+      "id": "d219ca04-cbaa-43fb-8c1a-314ed374a1c1",
+      "name": "Draft Create Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4f2d17cd-3917-40d6-af5e-69f9063776ef",
+              "leftValue": "={{$json.aiDecision.action}}",
+              "rightValue": "update_workflow",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4fb3454a-802b-40dc-8332-d93c27258460",
+      "name": "If Update Workflow",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        40,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "workflowEntry",
+        "operation": "getAll",
+        "companyUuid": "={{$json.company.uuid}}",
+        "returnAll": true
+      },
+      "id": "c2a71b7a-3d6e-4418-a5e5-efc3b3d09ea8",
+      "name": "MSFrog Get Existing Entries",
+      "type": "CUSTOM.msfrog",
+      "typeVersion": 1,
+      "credentials": {
+        "msfrogApi": {
+          "id": "1",
+          "name": "MSFrog API"
+        }
+      },
+      "position": [
+        290,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('AI Decision Placeholder').first().json;\nconst entries = $('MSFrog Get Existing Entries').all().map((item) => item.json);\nconst text = String(source.combinedText || '').toLowerCase();\nconst subject = String(source.inboundEmail.subject || '').toLowerCase();\nconst referenceHint = String(source.aiDecision.existingEntryReferenceHint || '').toLowerCase();\n\nconst ranked = entries\n  .map((entry) => {\n    const workflowName = String(entry.workflow?.name || entry.workflow_name || '').toLowerCase();\n    const entryNumber = String(entry.entry_number || '').toLowerCase();\n    const entryName = String(entry.name || entry.entry_name || '').toLowerCase();\n    let score = 0;\n\n    if (referenceHint && entryNumber.includes(referenceHint)) score += 12;\n    if (subject && entryName.includes(subject)) score += 8;\n    if (workflowName && text.includes(workflowName)) score += 5;\n    if (source.linkLookup?.workflowEntryUuid && entry.uuid === source.linkLookup.workflowEntryUuid) score += 20;\n\n    return { entry, score };\n  })\n  .sort((a, b) => b.score - a.score);\n\nconst selectedEntry = ranked[0]?.entry;\nif (!selectedEntry) {\n  throw new Error('Could not resolve an existing workflow entry to update.');\n}\n\nconst steps = Array.isArray(selectedEntry.steps) ? selectedEntry.steps : [];\nconst stepHint = String(source.aiDecision.stepTitleHint || '').toLowerCase();\nconst selectedStep = steps.find((step) => String(step.title || '').toLowerCase().includes(stepHint))\n  || steps.find((step) => String(step.status || '').toLowerCase() !== 'completed')\n  || steps[0];\n\nif (!selectedStep) {\n  throw new Error('Resolved workflow entry has no steps to update.');\n}\n\nreturn [{\n  json: {\n    ...source,\n    selectedEntry: {\n      uuid: selectedEntry.uuid,\n      entryNumber: selectedEntry.entry_number || '',\n      workflowName: selectedEntry.workflow?.name || selectedEntry.workflow_name || '',\n      stepUuid: selectedStep.uuid,\n      stepTitle: selectedStep.title\n    },\n    msfrogUpdate: {\n      workflowEntryUuid: selectedEntry.uuid,\n      name: source.aiDecision.entryName,\n      description: `Updated from reply email ${source.inboundEmail.messageId}`,\n      stepAssignments: [\n        {\n          workflow_entry_step_uuid: selectedStep.uuid,\n          assigned_user_uuid: selectedStep.assigned_user_uuid || null,\n          due_date: selectedStep.due_date || null\n        }\n      ]\n    }\n  }\n}];"
+      },
+      "id": "dc0ca407-c769-4388-86c3-0b72e8715c08",
+      "name": "Prepare Update Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "workflowEntry",
+        "operation": "update",
+        "workflowEntryUuid": "={{$json.msfrogUpdate.workflowEntryUuid}}",
+        "name": "={{$json.msfrogUpdate.name}}",
+        "description": "={{$json.msfrogUpdate.description}}",
+        "stepAssignments": "={{ JSON.stringify($json.msfrogUpdate.stepAssignments) }}"
+      },
+      "id": "53f65f16-592b-4279-8ca4-30ba6bd281ef",
+      "name": "MSFrog Update Workflow Entry",
+      "type": "CUSTOM.msfrog",
+      "typeVersion": 1,
+      "credentials": {
+        "msfrogApi": {
+          "id": "1",
+          "name": "MSFrog API"
+        }
+      },
+      "position": [
+        790,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "workflowEntry",
+        "operation": "createComment",
+        "workflowEntryUuid": "={{$json.uuid}}",
+        "comment": "={{$('AI Decision Placeholder').first().json.aiDecision.commentText}}"
+      },
+      "id": "7ebd6ffc-9d55-45c5-ba3b-1949e7c67cb0",
+      "name": "MSFrog Comment Existing Entry",
+      "type": "CUSTOM.msfrog",
+      "typeVersion": 1,
+      "credentials": {
+        "msfrogApi": {
+          "id": "1",
+          "name": "MSFrog API"
+        }
+      },
+      "position": [
+        1040,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('AI Decision Placeholder').first().json;\nconst updatedEntry = $('MSFrog Update Workflow Entry').first().json;\n\nreturn [{\n  json: {\n    outcome: 'updated',\n    workflowEntryUuid: updatedEntry.uuid,\n    replyTo: source.from,\n    replySubject: `Re: ${source.inboundEmail.subject}`,\n    replyBody: `${source.aiDecision.replyDraft}\\n\\nReference: ${updatedEntry.entry_number || updatedEntry.uuid}`,\n    mappingRecord: {\n      mailbox: source.mailbox,\n      messageId: source.inboundEmail.messageId,\n      threadId: source.inboundEmail.threadId,\n      workflowEntryUuid: updatedEntry.uuid,\n      companyUuid: source.company.uuid,\n      lastAction: 'update_workflow'\n    }\n  }\n}];"
+      },
+      "id": "d54034a8-ddd4-4b61-baf3-e13bcf9280ae",
+      "name": "Draft Update Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1290,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('AI Decision Placeholder').first().json;\n\nreturn [{\n  json: {\n    outcome: 'self_resolve',\n    replyTo: source.from,\n    replySubject: `Re: ${source.inboundEmail.subject}`,\n    replyBody: source.aiDecision.replyDraft,\n    mappingRecord: {\n      mailbox: source.mailbox,\n      messageId: source.inboundEmail.messageId,\n      threadId: source.inboundEmail.threadId,\n      workflowEntryUuid: source.linkLookup?.workflowEntryUuid || '',\n      companyUuid: source.company.uuid,\n      lastAction: 'self_resolve'\n    }\n  }\n}];"
+      },
+      "id": "77e45dab-65d9-4c47-b64e-67d6fa2cc7f2",
+      "name": "Draft Self Resolve Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json;\nconst ai = $('AI Decision Placeholder').first()?.json?.aiDecision || {};\nconst company = $('Resolve Company').first()?.json?.company || {};\n\nconst selectedWorkflow = $('Prepare Create Payload').first()?.json?.selectedWorkflow\n  || $('Prepare Update Payload').first()?.json?.selectedEntry\n  || null;\n\nconst action = String(ai.action || result.mappingRecord?.lastAction || 'unknown');\nconst outcome = String(result.outcome || 'unknown');\nconst createdOrUpdatedEntryUuid = result.workflowEntryUuid || result.mappingRecord?.workflowEntryUuid || '';\n\nconst summaryLines = [\n  `Outcome: ${outcome}`,\n  `Action decided: ${action}`,\n  `Company: ${company.name || 'unknown'} (${company.uuid || 'n/a'})`,\n  `Workflow hint: ${ai.workflowNameHint || 'n/a'}`,\n  `Selected workflow/entry: ${selectedWorkflow?.name || selectedWorkflow?.workflowName || 'n/a'}`,\n  `Selected step: ${selectedWorkflow?.stepTitle || 'n/a'} (${selectedWorkflow?.stepUuid || 'n/a'})`,\n  `Workflow entry UUID: ${createdOrUpdatedEntryUuid || 'none'}`,\n  `Mailbox: ${result.mappingRecord?.mailbox || 'n/a'}`,\n  `Thread: ${result.mappingRecord?.threadId || 'n/a'}`,\n  `Message ID: ${result.mappingRecord?.messageId || 'n/a'}`,\n  `Reply target: ${result.replyTo || 'n/a'}`,\n  `Reply subject: ${result.replySubject || 'n/a'}`\n];\n\nreturn [{\n  json: {\n    ...result,\n    executionSummary: {\n      outcome,\n      action,\n      companyName: company.name || null,\n      companyUuid: company.uuid || null,\n      workflowHint: ai.workflowNameHint || null,\n      selectedWorkflowName: selectedWorkflow?.name || selectedWorkflow?.workflowName || null,\n      selectedStepTitle: selectedWorkflow?.stepTitle || null,\n      selectedStepUuid: selectedWorkflow?.stepUuid || null,\n      workflowEntryUuid: createdOrUpdatedEntryUuid || null,\n      mailbox: result.mappingRecord?.mailbox || null,\n      threadId: result.mappingRecord?.threadId || null,\n      messageId: result.mappingRecord?.messageId || null\n    },\n    summaryText: summaryLines.join('\\n')\n  }\n}];"
+      },
+      "id": "9a7f3c4d-f3ec-4f6c-9c4e-0f66fd8aab4f",
+      "name": "Execution Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const summary = $json.executionSummary || {};\nconst outcome = String(summary.outcome || '').trim();\nconst action = String(summary.action || '').trim();\n\nconst errors = [];\n\nif (!summary.companyUuid) errors.push('companyUuid is missing');\nif (!summary.mailbox) errors.push('mailbox is missing');\nif (!summary.threadId) errors.push('threadId is missing');\nif (!summary.messageId) errors.push('messageId is missing');\nif (!outcome) errors.push('outcome is missing');\nif (!action) errors.push('action is missing');\n\nif (action === 'create_workflow' || outcome === 'created') {\n  if (!summary.workflowEntryUuid) errors.push('workflowEntryUuid is missing for create flow');\n  if (!summary.selectedWorkflowName) errors.push('selectedWorkflowName is missing for create flow');\n}\n\nif (action === 'update_workflow' || outcome === 'updated') {\n  if (!summary.workflowEntryUuid) errors.push('workflowEntryUuid is missing for update flow');\n  if (!summary.selectedStepUuid) errors.push('selectedStepUuid is missing for update flow');\n}\n\nif (action === 'self_resolve' || outcome === 'self_resolve') {\n  if (!$json.replyBody) errors.push('replyBody is missing for self-resolve flow');\n}\n\nif (errors.length > 0) {\n  throw new Error(`Execution assertions failed: ${errors.join('; ')}`);\n}\n\nreturn [{\n  json: {\n    ...$json,\n    assertions: {\n      passed: true,\n      checkedAt: new Date().toISOString(),\n      rulesChecked: [\n        'base summary fields',\n        'create/update/self_resolve-specific fields'\n      ]\n    }\n  }\n}];"
+      },
+      "id": "2b2313f2-53e8-4949-b4f2-9f5f5eb2ed8f",
+      "name": "Assert End Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Mock Inbound Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Inbound Email": {
+      "main": [
+        [
+          {
+            "node": "Normalize Email Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Email Payload": {
+      "main": [
+        [
+          {
+            "node": "MSFrog Get Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MSFrog Get Companies": {
+      "main": [
+        [
+          {
+            "node": "Resolve Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Company": {
+      "main": [
+        [
+          {
+            "node": "MSFrog Get Workflow Types",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MSFrog Get Workflow Types": {
+      "main": [
+        [
+          {
+            "node": "AI Decision Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Decision Placeholder": {
+      "main": [
+        [
+          {
+            "node": "If Create Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Create Workflow": {
+      "main": [
+        [
+          {
+            "node": "Prepare Create Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Update Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Create Payload": {
+      "main": [
+        [
+          {
+            "node": "MSFrog Create Workflow Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MSFrog Create Workflow Entry": {
+      "main": [
+        [
+          {
+            "node": "MSFrog Comment New Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MSFrog Comment New Entry": {
+      "main": [
+        [
+          {
+            "node": "Draft Create Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Create Reply": {
+      "main": [
+        [
+          {
+            "node": "Execution Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Update Workflow": {
+      "main": [
+        [
+          {
+            "node": "MSFrog Get Existing Entries",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft Self Resolve Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MSFrog Get Existing Entries": {
+      "main": [
+        [
+          {
+            "node": "Prepare Update Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Update Payload": {
+      "main": [
+        [
+          {
+            "node": "MSFrog Update Workflow Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MSFrog Update Workflow Entry": {
+      "main": [
+        [
+          {
+            "node": "MSFrog Comment Existing Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MSFrog Comment Existing Entry": {
+      "main": [
+        [
+          {
+            "node": "Draft Update Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Update Reply": {
+      "main": [
+        [
+          {
+            "node": "Execution Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Self Resolve Reply": {
+      "main": [
+        [
+          {
+            "node": "Execution Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execution Summary": {
+      "main": [
+        [
+          {
+            "node": "Assert End Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {},
+  "versionId": "b70ffde0-09d5-4c7c-ad68-536edda794aa",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "b4ae5aa9-87d1-4316-9fd4-f54d26050a2f",
+  "tags": []
+}
