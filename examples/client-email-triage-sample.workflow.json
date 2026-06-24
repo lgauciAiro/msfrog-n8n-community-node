@@ -40,31 +40,10 @@
     },
     {
       "parameters": {
-        "resource": "company",
-        "operation": "getAll",
-        "returnAll": true
-      },
-      "id": "4c4141a7-1a2b-4f9a-a2d6-6179d2819458",
-      "name": "MSFrog Get Companies",
-      "type": "CUSTOM.msfrog",
-      "typeVersion": 1,
-      "credentials": {
-        "msfrogApi": {
-          "id": "1",
-          "name": "MSFrog API"
-        }
-      },
-      "position": [
-        -1120,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const source = $('Normalize Email Payload').first().json;\nconst companies = $input.all().map((item) => item.json);\nconst routeHint = source.routeHint || {};\nconst companyHint = String(routeHint.companyNameHint || source.senderDomain || '').toLowerCase();\n\nconst ranked = companies\n  .map((company) => {\n    const name = String(company.name || '').toLowerCase();\n    let score = 0;\n\n    if (companyHint && name.includes(companyHint)) score += 10;\n    if (companyHint && companyHint.includes(name)) score += 6;\n    if (source.senderDomain && name.includes(String(source.senderDomain).split('.')[0])) score += 4;\n\n    return { company, score };\n  })\n  .sort((a, b) => b.score - a.score);\n\nconst selected = ranked[0]?.company;\nif (!selected) {\n  throw new Error('Could not resolve company from mailbox and email hints.');\n}\n\nreturn [{\n  json: {\n    ...source,\n    company: {\n      uuid: selected.uuid,\n      name: selected.name,\n      active: selected.active\n    },\n    companyCandidates: ranked.slice(0, 5).map((item) => ({\n      uuid: item.company.uuid,\n      name: item.company.name,\n      score: item.score\n    }))\n  }\n}];"
+        "jsCode": "const source = $('Normalize Email Payload').first().json;\nconst routeHint = source.routeHint || {};\nconst companyUuid = String(routeHint.companyUuidHint || '').trim() || 'token-company';\nconst companyName = String(routeHint.companyNameHint || '').trim() || 'Current Company';\n\nreturn [{\n  json: {\n    ...source,\n    company: {\n      uuid: companyUuid,\n      name: companyName,\n      active: true\n    }\n  }\n}];"
       },
       "id": "d25022c6-f1ca-48dc-bb27-c9fc6acee9fb",
-      "name": "Resolve Company",
+      "name": "Set Token Company Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -76,7 +55,6 @@
       "parameters": {
         "resource": "workflow",
         "operation": "getTypes",
-        "companyUuid": "={{$json.company.uuid}}",
         "returnAll": true
       },
       "id": "565a7cc8-9dd3-4915-a52e-53e1afce74be",
@@ -96,7 +74,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const source = $('Resolve Company').first().json;\nconst workflows = $input.all().map((item) => item.json);\nconst body = String(source.combinedText || '').toLowerCase();\nconst isReply = Boolean(source.inboundEmail?.inReplyTo) || Boolean(source.linkLookup?.matched);\nconst workflowHint = String(source.routeHint?.workflowNameHint || '').toLowerCase();\n\nlet action = 'create_workflow';\nlet canSelfResolve = false;\nlet replyDraft = 'We have logged your issue and will keep you updated.';\n\nif (body.includes('resolved') || body.includes('fixed') || body.includes('working now')) {\n  action = 'self_resolve';\n  canSelfResolve = true;\n  replyDraft = 'Thanks for the update. Based on your email this looks resolved. Please let us know if the issue returns.';\n} else if (isReply || body.includes('existing ticket') || body.includes('update case') || body.includes('follow up')) {\n  action = 'update_workflow';\n  replyDraft = 'Thanks for the additional information. We have updated your existing case.';\n}\n\nconst workflowCandidates = workflows\n  .map((workflow) => {\n    const name = String(workflow.name || '').toLowerCase();\n    let score = 0;\n    if (workflowHint && name.includes(workflowHint)) score += 10;\n    if (body.includes(name)) score += 6;\n    if (name.includes('support') && (body.includes('issue') || body.includes('error') || body.includes('help'))) score += 3;\n    return { workflow, score };\n  })\n  .sort((a, b) => b.score - a.score);\n\nconst selectedWorkflow = workflowCandidates[0]?.workflow || null;\n\nreturn [{\n  json: {\n    ...source,\n    availableWorkflowTypes: workflows.map((workflow) => ({\n      uuid: workflow.uuid,\n      name: workflow.name,\n      status: workflow.status\n    })),\n    aiDecision: {\n      summary: source.inboundEmail?.subject || 'Client support request',\n      canSelfResolve,\n      action,\n      replyNeeded: true,\n      replyDraft,\n      workflowNameHint: selectedWorkflow?.name || source.routeHint?.workflowNameHint || '',\n      workflowUuidCandidate: selectedWorkflow?.uuid || '',\n      stepTitleHint: body.includes('printer') ? 'investigate' : '',\n      existingEntryReferenceHint: '',\n      entryName: source.inboundEmail?.subject || 'New support case',\n      commentText: `Inbound email from ${source.from}:\\n\\n${source.combinedText}`\n    }\n  }\n}];"
+        "jsCode": "const source = $('Set Token Company Context').first().json;\nconst workflows = $input.all().map((item) => item.json);\nconst body = String(source.combinedText || '').toLowerCase();\nconst isReply = Boolean(source.inboundEmail?.inReplyTo) || Boolean(source.linkLookup?.matched);\nconst workflowHint = String(source.routeHint?.workflowNameHint || '').toLowerCase();\n\nlet action = 'create_workflow';\nlet canSelfResolve = false;\nlet replyDraft = 'We have logged your issue and will keep you updated.';\n\nif (body.includes('resolved') || body.includes('fixed') || body.includes('working now')) {\n  action = 'self_resolve';\n  canSelfResolve = true;\n  replyDraft = 'Thanks for the update. Based on your email this looks resolved. Please let us know if the issue returns.';\n} else if (isReply || body.includes('existing ticket') || body.includes('update case') || body.includes('follow up')) {\n  action = 'update_workflow';\n  replyDraft = 'Thanks for the additional information. We have updated your existing case.';\n}\n\nconst workflowCandidates = workflows\n  .map((workflow) => {\n    const name = String(workflow.name || '').toLowerCase();\n    let score = 0;\n    if (workflowHint && name.includes(workflowHint)) score += 10;\n    if (body.includes(name)) score += 6;\n    if (name.includes('support') && (body.includes('issue') || body.includes('error') || body.includes('help'))) score += 3;\n    return { workflow, score };\n  })\n  .sort((a, b) => b.score - a.score);\n\nconst selectedWorkflow = workflowCandidates[0]?.workflow || null;\n\nreturn [{\n  json: {\n    ...source,\n    availableWorkflowTypes: workflows.map((workflow) => ({\n      uuid: workflow.uuid,\n      name: workflow.name,\n      status: workflow.status\n    })),\n    aiDecision: {\n      summary: source.inboundEmail?.subject || 'Client support request',\n      canSelfResolve,\n      action,\n      replyNeeded: true,\n      replyDraft,\n      workflowNameHint: selectedWorkflow?.name || source.routeHint?.workflowNameHint || '',\n      workflowUuidCandidate: selectedWorkflow?.uuid || '',\n      stepTitleHint: body.includes('printer') ? 'investigate' : '',\n      existingEntryReferenceHint: '',\n      entryName: source.inboundEmail?.subject || 'New support case',\n      commentText: `Inbound email from ${source.from}:\\n\\n${source.combinedText}`\n    }\n  }\n}];"
       },
       "id": "c61e8de2-0d0c-4b4f-a7a2-d45b35caafc9",
       "name": "AI Decision Placeholder",
@@ -249,7 +227,6 @@
       "parameters": {
         "resource": "workflowEntry",
         "operation": "getAll",
-        "companyUuid": "={{$json.company.uuid}}",
         "returnAll": true
       },
       "id": "c2a71b7a-3d6e-4418-a5e5-efc3b3d09ea8",
@@ -354,7 +331,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const result = $json;\nconst ai = $('AI Decision Placeholder').first()?.json?.aiDecision || {};\nconst company = $('Resolve Company').first()?.json?.company || {};\n\nconst selectedWorkflow = $('Prepare Create Payload').first()?.json?.selectedWorkflow\n  || $('Prepare Update Payload').first()?.json?.selectedEntry\n  || null;\n\nconst action = String(ai.action || result.mappingRecord?.lastAction || 'unknown');\nconst outcome = String(result.outcome || 'unknown');\nconst createdOrUpdatedEntryUuid = result.workflowEntryUuid || result.mappingRecord?.workflowEntryUuid || '';\n\nconst summaryLines = [\n  `Outcome: ${outcome}`,\n  `Action decided: ${action}`,\n  `Company: ${company.name || 'unknown'} (${company.uuid || 'n/a'})`,\n  `Workflow hint: ${ai.workflowNameHint || 'n/a'}`,\n  `Selected workflow/entry: ${selectedWorkflow?.name || selectedWorkflow?.workflowName || 'n/a'}`,\n  `Selected step: ${selectedWorkflow?.stepTitle || 'n/a'} (${selectedWorkflow?.stepUuid || 'n/a'})`,\n  `Workflow entry UUID: ${createdOrUpdatedEntryUuid || 'none'}`,\n  `Mailbox: ${result.mappingRecord?.mailbox || 'n/a'}`,\n  `Thread: ${result.mappingRecord?.threadId || 'n/a'}`,\n  `Message ID: ${result.mappingRecord?.messageId || 'n/a'}`,\n  `Reply target: ${result.replyTo || 'n/a'}`,\n  `Reply subject: ${result.replySubject || 'n/a'}`\n];\n\nreturn [{\n  json: {\n    ...result,\n    executionSummary: {\n      outcome,\n      action,\n      companyName: company.name || null,\n      companyUuid: company.uuid || null,\n      workflowHint: ai.workflowNameHint || null,\n      selectedWorkflowName: selectedWorkflow?.name || selectedWorkflow?.workflowName || null,\n      selectedStepTitle: selectedWorkflow?.stepTitle || null,\n      selectedStepUuid: selectedWorkflow?.stepUuid || null,\n      workflowEntryUuid: createdOrUpdatedEntryUuid || null,\n      mailbox: result.mappingRecord?.mailbox || null,\n      threadId: result.mappingRecord?.threadId || null,\n      messageId: result.mappingRecord?.messageId || null\n    },\n    summaryText: summaryLines.join('\\n')\n  }\n}];"
+        "jsCode": "const result = $json;\nconst ai = $('AI Decision Placeholder').first()?.json?.aiDecision || {};\nconst company = $('Set Token Company Context').first()?.json?.company || {};\n\nconst selectedWorkflow = $('Prepare Create Payload').first()?.json?.selectedWorkflow\n  || $('Prepare Update Payload').first()?.json?.selectedEntry\n  || null;\n\nconst action = String(ai.action || result.mappingRecord?.lastAction || 'unknown');\nconst outcome = String(result.outcome || 'unknown');\nconst createdOrUpdatedEntryUuid = result.workflowEntryUuid || result.mappingRecord?.workflowEntryUuid || '';\n\nconst summaryLines = [\n  `Outcome: ${outcome}`,\n  `Action decided: ${action}`,\n  `Company: ${company.name || 'unknown'} (${company.uuid || 'n/a'})`,\n  `Workflow hint: ${ai.workflowNameHint || 'n/a'}`,\n  `Selected workflow/entry: ${selectedWorkflow?.name || selectedWorkflow?.workflowName || 'n/a'}`,\n  `Selected step: ${selectedWorkflow?.stepTitle || 'n/a'} (${selectedWorkflow?.stepUuid || 'n/a'})`,\n  `Workflow entry UUID: ${createdOrUpdatedEntryUuid || 'none'}`,\n  `Mailbox: ${result.mappingRecord?.mailbox || 'n/a'}`,\n  `Thread: ${result.mappingRecord?.threadId || 'n/a'}`,\n  `Message ID: ${result.mappingRecord?.messageId || 'n/a'}`,\n  `Reply target: ${result.replyTo || 'n/a'}`,\n  `Reply subject: ${result.replySubject || 'n/a'}`\n];\n\nreturn [{\n  json: {\n    ...result,\n    executionSummary: {\n      outcome,\n      action,\n      companyName: company.name || null,\n      companyUuid: company.uuid || null,\n      workflowHint: ai.workflowNameHint || null,\n      selectedWorkflowName: selectedWorkflow?.name || selectedWorkflow?.workflowName || null,\n      selectedStepTitle: selectedWorkflow?.stepTitle || null,\n      selectedStepUuid: selectedWorkflow?.stepUuid || null,\n      workflowEntryUuid: createdOrUpdatedEntryUuid || null,\n      mailbox: result.mappingRecord?.mailbox || null,\n      threadId: result.mappingRecord?.threadId || null,\n      messageId: result.mappingRecord?.messageId || null\n    },\n    summaryText: summaryLines.join('\\n')\n  }\n}];"
       },
       "id": "9a7f3c4d-f3ec-4f6c-9c4e-0f66fd8aab4f",
       "name": "Execution Summary",
@@ -406,25 +383,14 @@
       "main": [
         [
           {
-            "node": "MSFrog Get Companies",
+            "node": "Set Token Company Context",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "MSFrog Get Companies": {
-      "main": [
-        [
-          {
-            "node": "Resolve Company",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Resolve Company": {
+    "Set Token Company Context": {
       "main": [
         [
           {
