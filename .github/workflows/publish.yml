@@ -54,12 +54,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Publish to npm (token)
-        if: (startsWith(github.ref, 'refs/tags/v') || inputs.publish == true) && secrets.NPM_TOKEN != ''
+      - name: Publish to npm
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish == true
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish to npm (trusted publisher)
-        if: (startsWith(github.ref, 'refs/tags/v') || inputs.publish == true) && secrets.NPM_TOKEN == ''
-        run: npm publish --provenance --access public
