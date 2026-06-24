@@ -5,8 +5,9 @@ import type {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 type MsfrogResource = 'workflow' | 'company' | 'user' | 'workflowEntry' | 'task';
 type MsfrogOperation =
@@ -84,7 +85,7 @@ export class Msfrog implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get list of Workflow Entry Types',
+						name: 'Get List of Workflow Entry Types',
 						value: 'getTypes',
 						action: 'Get workflow entry types',
 						description: 'List workflow definitions that can be used as workflow entry types',
@@ -150,46 +151,10 @@ export class Msfrog implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get list of existing Workflow Entries for the company (completed or not)',
-						value: 'getAll',
-						action: 'Get workflow entries',
-						description: 'List workflow entries for the current company or a selected company UUID',
-					},
-					{
-						name: 'Create Workflow Entry',
-						value: 'create',
-						action: 'Create a workflow entry',
-						description: 'Create a new entry for a workflow',
-					},
-					{
-						name: 'Update Workflow Entry',
-						value: 'update',
-						action: 'Update a workflow entry',
-						description: 'Update an existing workflow entry',
-					},
-					{
-						name: 'Fetch Step',
-						value: 'fetchStep',
-						action: 'Fetch a workflow entry step',
-						description: 'Fetch a step from a workflow entry by entry UUID and step UUID',
-					},
-					{
-						name: 'Update Step',
-						value: 'updateStep',
-						action: 'Update a workflow entry step',
-						description: 'Update a workflow entry step',
-					},
-					{
 						name: 'Complete Step',
 						value: 'completeStep',
 						action: 'Complete a workflow entry step',
 						description: 'Mark a workflow entry step complete',
-					},
-					{
-						name: 'Un-complete Step',
-						value: 'uncompleteStep',
-						action: 'Un-complete a workflow entry step',
-						description: 'Reopen a workflow entry step',
 					},
 					{
 						name: 'Create Comment',
@@ -198,16 +163,52 @@ export class Msfrog implements INodeType {
 						description: 'Create a comment on a workflow entry',
 					},
 					{
-						name: 'Update Comment',
-						value: 'updateComment',
-						action: 'Update a workflow entry comment',
-						description: 'Update a workflow entry comment',
+						name: 'Create Workflow Entry',
+						value: 'create',
+						action: 'Create a workflow entry',
+						description: 'Create a new entry for a workflow',
 					},
 					{
 						name: 'Delete Comment',
 						value: 'deleteComment',
 						action: 'Delete a workflow entry comment',
 						description: 'Delete a workflow entry comment',
+					},
+					{
+						name: 'Fetch Step',
+						value: 'fetchStep',
+						action: 'Fetch a workflow entry step',
+						description: 'Fetch a step from a workflow entry by entry UUID and step UUID',
+					},
+					{
+						name: 'Get Many',
+						value: 'getAll',
+						action: 'Get workflow entries',
+						description: 'List workflow entries for the current company or a selected company UUID',
+					},
+					{
+						name: 'Un-Complete Step',
+						value: 'uncompleteStep',
+						action: 'Un complete a workflow entry step',
+						description: 'Reopen a workflow entry step',
+					},
+					{
+						name: 'Update Comment',
+						value: 'updateComment',
+						action: 'Update a workflow entry comment',
+						description: 'Update a workflow entry comment',
+					},
+					{
+						name: 'Update Step',
+						value: 'updateStep',
+						action: 'Update a workflow entry step',
+						description: 'Update a workflow entry step',
+					},
+					{
+						name: 'Update Workflow Entry',
+						value: 'update',
+						action: 'Update a workflow entry',
+						description: 'Update an existing workflow entry',
 					},
 				],
 			},
@@ -224,34 +225,10 @@ export class Msfrog implements INodeType {
 				},
 				options: [
 					{
-						name: 'Create new Task',
-						value: 'create',
-						action: 'Create a task',
-						description: 'Create a new task',
-					},
-					{
-						name: 'Update Task',
-						value: 'update',
-						action: 'Update a task',
-						description: 'Update an existing task',
-					},
-					{
-						name: 'Delete Task',
-						value: 'deleteTask',
-						action: 'Delete a task',
-						description: 'Delete a task',
-					},
-					{
 						name: 'Complete Task',
 						value: 'completeTask',
 						action: 'Complete a task',
 						description: 'Mark a task complete',
-					},
-					{
-						name: 'Un-complete Task',
-						value: 'uncompleteTask',
-						action: 'Un-complete a task',
-						description: 'Reopen a task',
 					},
 					{
 						name: 'Create Comment',
@@ -260,16 +237,40 @@ export class Msfrog implements INodeType {
 						description: 'Create a comment on a task',
 					},
 					{
-						name: 'Update Comment',
-						value: 'updateComment',
-						action: 'Update a task comment',
-						description: 'Update a task comment',
+						name: 'Create New Task',
+						value: 'create',
+						action: 'Create a task',
+						description: 'Create a new task',
 					},
 					{
 						name: 'Delete Comment',
 						value: 'deleteComment',
 						action: 'Delete a task comment',
 						description: 'Delete a task comment',
+					},
+					{
+						name: 'Delete Task',
+						value: 'deleteTask',
+						action: 'Delete a task',
+						description: 'Delete a task',
+					},
+					{
+						name: 'Un-Complete Task',
+						value: 'uncompleteTask',
+						action: 'Un complete a task',
+						description: 'Reopen a task',
+					},
+					{
+						name: 'Update Comment',
+						value: 'updateComment',
+						action: 'Update a task comment',
+						description: 'Update a task comment',
+					},
+					{
+						name: 'Update Task',
+						value: 'update',
+						action: 'Update a task',
+						description: 'Update an existing task',
 					},
 				],
 			},
@@ -293,7 +294,7 @@ export class Msfrog implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-				description: 'The workflow entry UUID',
+
 				displayOptions: {
 					show: {
 						resource: ['workflowEntry'],
@@ -407,7 +408,7 @@ export class Msfrog implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-				description: 'The comment UUID',
+
 				displayOptions: {
 					show: {
 						resource: ['workflowEntry'],
@@ -421,7 +422,7 @@ export class Msfrog implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-				description: 'The task UUID',
+
 				displayOptions: {
 					show: {
 						resource: ['task'],
@@ -464,7 +465,7 @@ export class Msfrog implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-				description: 'The task comment UUID',
+
 				displayOptions: {
 					show: {
 						resource: ['task'],
@@ -539,7 +540,7 @@ export class Msfrog implements INodeType {
 			} catch (error) {
 				const message = (error as Error)?.message ?? '';
 				if (!message.includes('Node does not have any credentials set')) {
-					throw error;
+					throw new NodeApiError(this.getNode(), error as JsonObject);
 				}
 
 				// Fallback for environments where helper lookup can fail despite a linked credential.
