@@ -50,6 +50,42 @@ Create this credential once and then select the same saved **MSFrog API** creden
 
 These steps apply when you are running n8n in a Docker container and want to load this custom node package into it.
 
+### If you do not have an n8n container yet
+
+Use this quick first-time setup before continuing with the custom node mount steps.
+
+1. Install Docker Desktop and start it.
+2. Pull the latest n8n image:
+
+```bash
+docker pull docker.n8n.io/n8nio/n8n
+```
+
+3. Create a persistent Docker volume for n8n data:
+
+```bash
+docker volume create n8n_data
+```
+
+4. Run n8n once to initialize your instance:
+
+```bash
+docker run -it --name n8n \
+  -p 5678:5678 \
+  -v n8n_data:/home/node/.n8n \
+  docker.n8n.io/n8nio/n8n
+```
+
+5. Open http://localhost:5678 and complete the first-run owner account setup.
+6. Stop and remove that container after initialization (keep the `n8n_data` volume):
+
+```bash
+docker stop n8n
+docker rm n8n
+```
+
+After this, continue with the steps below to run n8n with the custom node mount.
+
 ### Prerequisites
 
 - Docker Desktop installed and running
