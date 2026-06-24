@@ -9,7 +9,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://bitbucket.org/airomt/wiso-n8n.git"
+    "url": "https://github.com/lgauciAiro/msfrog-n8n-community-node.git"
+  },
+  "homepage": "https://github.com/lgauciAiro/msfrog-n8n-community-node#readme",
+  "bugs": {
+    "url": "https://github.com/lgauciAiro/msfrog-n8n-community-node/issues"
   },
   "engines": {
     "node": ">=22 <23"
